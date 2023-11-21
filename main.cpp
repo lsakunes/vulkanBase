@@ -656,11 +656,7 @@ private:
 
             createInfo.pNext = nullptr;
         }
-
-        if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create instance");
-        }
-
+        
         uint32_t glfwExtensionCount = 0;
         const char** glfwExtensions;
 
@@ -682,7 +678,7 @@ private:
         createInfo.ppEnabledExtensionNames = requiredExtensions.data();
 
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-            throw std::runtime_error("what the heck");
+            throw std::runtime_error("failed to create instance");
         }
 
         uint32_t extensionCount = 0;
