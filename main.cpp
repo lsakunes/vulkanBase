@@ -1,14 +1,4 @@
 // SENUKA LIYANAGE 2023
-// TODO
-// 1. wtf is a queue family
-// 
-// 2. If you like a challenge, then you can still try to use a different queue family specifically for transfer operations. It will require you to make the following modifications to your program:
-//      Modify QueueFamilyIndices and findQueueFamilies to explicitly look for a queue family with the VK_QUEUE_TRANSFER_BIT bit, but not the VK_QUEUE_GRAPHICS_BIT.
-//      Modify createLogicalDevice to request a handle to the transfer queue
-//      Create a second command pool for command buffers that are submitted on the transfer queue family
-//      Change the sharingMode of resources to be VK_SHARING_MODE_CONCURRENT and specify both the graphics and transfer queue families
-//      Submit any transfer commands like vkCmdCopyBuffer(which we'll be using in this chapter) to the transfer queue instead of the graphics queue
-//        It's a bit of work, but it'll teach you a lot about how resources are shared between queue families.
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -117,9 +107,12 @@ const std::vector<Vertex> vertices = {
     {{-0.5f, -0.5f}, {0.0f, 0.0f, 0.01f}},
     {{0.33f, -0.1f}, {0.3f, 0.0f, 0.55f}},
     {{0.5f, 0.5f}, {0.0f, 0.0f, 0.01f}},
-    {{-0.5f, -0.5f}, {0.0f, 0.0f, 0.01f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 0.01f}},
     {{-0.1f, 0.33f}, {0.5f, 0.0f, 0.1f}},
+};
+
+//Note #4
+const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0
 };
 #pragma endregion
 
@@ -172,6 +165,8 @@ private:
 
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
+    VkBuffer indexBuffer;
+    VkDeviceMemory indexBufferMemory;
     #pragma endregion
 
     void initVulkan() {
@@ -187,6 +182,7 @@ private:
         createFramebuffers();
         createCommandPool();
         createVertexBuffer();
+        createIndexBuffer();
         createCommandBuffers();
         createSyncObjects();
     }
@@ -899,6 +895,9 @@ private:
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
+        //Note #4
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -913,7 +912,8 @@ private:
         scissor.extent = swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+        //Note #5
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
 
@@ -923,7 +923,7 @@ private:
     }
     #pragma endregion
 
-    #pragma region Vertex Buffer
+    #pragma region Buffers (Vertex and Index)
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -950,10 +950,7 @@ private:
 
     }
 
-    // For later:
-    // You may wish to create a separate command pool for these kinds of short-lived buffers, 
-    // because the implementation may be able to apply memory allocation optimizations. 
-    // You should use the VK_COMMAND_POOL_CREATE_TRANSIENT_BIT flag during command pool generation in that case.
+    // Note #3
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1004,6 +1001,26 @@ private:
 
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
         copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
+    void createIndexBuffer() {
+        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, indices.data(), (size_t)bufferSize);
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -1126,6 +1143,9 @@ private:
         vkDestroyBuffer(device, vertexBuffer, nullptr);
         vkFreeMemory(device, vertexBufferMemory, nullptr);
 
+        vkDestroyBuffer(device, indexBuffer, nullptr);
+        vkFreeMemory(device, indexBufferMemory, nullptr);
+
         vkDestroyRenderPass(device, renderPass, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -1241,3 +1261,40 @@ int main() {
 
     return EXIT_SUCCESS;
 }
+
+//NOTES:
+//
+// #1
+//  You're not supposed to actually call vkAllocateMemory for every individual buffer.
+//  The maximum number of simultaneous memory allocations is limited by the maxMemoryAllocationCount physical device limit
+//  The right way to allocate memory for a large number of objects at the same time is to create a custom allocator that splits up a single allocation among many different objects by using the offset parameters that we've seen in many functions.
+//  Either implement such an allocator yourself, or use the VulkanMemoryAllocator (https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator) library provided by the GPUOpen initiative.
+// 
+// #2
+//  If you like a challenge, then you can still try to use a different queue family specifically for transfer operations. It will require you to make the following modifications to your program:
+//  Modify QueueFamilyIndices and findQueueFamilies to explicitly look for a queue family with the VK_QUEUE_TRANSFER_BIT bit, but not the VK_QUEUE_GRAPHICS_BIT.
+//  Modify createLogicalDevice to request a handle to the transfer queue
+//  Create a second command pool for command buffers that are submitted on the transfer queue family
+//  Change the sharingMode of resources to be VK_SHARING_MODE_CONCURRENT and specify both the graphics and transfer queue families
+//  Submit any transfer commands like vkCmdCopyBuffer(which we'll be using in this chapter) to the transfer queue instead of the graphics queue
+//  It's a bit of work, but it'll teach you a lot about how resources are shared between queue families.
+// 
+// #3
+//  (copyBuffer function)
+//  You may wish to create a separate command pool for these kinds of short-lived buffers, because the implementation may be able to apply memory allocation optimizations. 
+//  You should use the VK_COMMAND_POOL_CREATE_TRANSIENT_BIT flag during command pool generation in that case.
+//
+// #4
+//  Switch to uint32_t when over 65535 unique vertices on indexBuffer initialization and bind
+//
+// #5
+//  (command buffer draw)
+//  We're not using instancing so we specify 1 instance
+// 
+// #6
+//  Driver developers recommend that you also store multiple buffers, like the vertex and index buffer, into a single VkBuffer and use offsets in commands like vkCmdBindVertexBuffers.
+//  The advantage is that your data is more cache friendly in that case, because it's closer together.
+//  It is even possible to reuse the same chunk of memory for multiple resources if they are not used during the same render operations, provided that their data is refreshed, of course.
+//  This is known as aliasing and some Vulkan functions have explicit flags to specify that you want to do this.
+//
+
