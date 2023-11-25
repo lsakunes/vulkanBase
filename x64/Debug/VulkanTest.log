@@ -1,2 +1,3 @@
 ﻿  main.cpp
+C:\Users\senuk\source\repos\Vulkan\VulkanTest\VulkanTest\main.cpp(1511): warning C4715: 'HelloTriangleApplication::findSupportedFormat': not all control paths return a value
   VulkanTest.vcxproj -> C:\Users\senuk\source\repos\Vulkan\VulkanTest\x64\Debug\VulkanTest.exe
